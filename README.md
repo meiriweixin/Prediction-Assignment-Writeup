@@ -23,4 +23,5 @@ Feature selection is fulfilled using the recursive feature elimination method in
 A Random Forest algorithm is used on each iteration to evaluate the model.
 The results show use top 4 features are enough to build a good prediction model.
 
+Step II. [Build the Predictive Model]
 In the end, a Random Forest algorithm is used based only on top 4 features.
