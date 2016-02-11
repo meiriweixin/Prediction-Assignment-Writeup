@@ -1,0 +1,96 @@
+---
+title: "Prediction Assignment Writeup"
+output: html_document
+---
+
+This script is to predict the manner in which person did the exercise.
+
+The data used come from this source: http://groupware.les.inf.puc-rio.br/har
+
+The caret package was used, and the Random Forest method was applied.
+
+```{r}
+
+#--------reading data-------------
+training = read.csv("/Users/weixinxu/Downloads/pml-training.csv",fill=TRUE, na.strings = c("NA"," ", "NAN",""), stringsAsFactors = FALSE, quote ="\"")
+testing =  read.csv("/Users/weixinxu/Downloads/pml-testing.csv",fill=TRUE, na.strings = c("NA", " ", "NAN",""), stringsAsFactors = FALSE,quote ="\"")
+
+#-------check data---------------
+# training data: 19622 records and 160 columns
+# testing  data: 20    recrods and 160 columns
+dim(training)
+str(training)
+dim(testing)
+str(testing)
+
+# count number of NAs per column
+noNA_col=apply(training, 2, function(x) sum(is.na(x)))
+
+# remove columns with more than 40%, i.e., 19622*40%=7848
+ntot=nrow(training)    #  total 19622 recrods in the training data
+training_2 = training[, !(noNA_col>ntot*0.4)] 
+apply(training_2, 2, function(x) sum(is.na(x)))
+
+
+#---------feature selection-------------
+table(training_2$new_window)
+table(training_2$num_window)
+table(training_2$classe)
+
+training_2$user_name = NULL
+training_2$X = NULL    # remove the row number
+training_2$raw_timestamp_part_1 = NULL
+training_2$raw_timestamp_part_2 = NULL
+training_2$cvtd_timestamp = NULL
+training_2$new_window = NULL
+str(training_2)
+training_2$classe = as.factor(training_2$classe)
+
+
+# remove higly correlated columns, cutoff=0.85
+set.seed(123)
+library(caret)
+library(mlbench)
+correlationMatrix = cor(subset(training_2, select=-c(classe)))
+highlyCorrelated = findCorrelation(correlationMatrix, cutoff = 0.85)
+#print(highlyCorrelated)
+training_2_reduce = training_2[, -c(highlyCorrelated)]
+str(training_2_reduce)
+
+# split data into training data and test data
+inTrain = createDataPartition(training_2_reduce$classe, p=0.75, list=FALSE)
+training_2_reduce_train = training_2_reduce[inTrain, ]
+training_2_reduce_test  = training_2_reduce[-inTrain, ]
+
+#------ feature selection by Recursive Feature Elimination (RFE)
+control = rfeControl(functions=rfFuncs, method = "cv", number = 5)
+fit.rf = rfe(classe~., data=training_2_reduce_train, sizes=c(1:45), rfeControl=control)
+#print(fit.rf)
+predictors(fit.rf)
+# The top 4 chosen features: "num_window"        "yaw_belt"          "magnet_dumbbell_z" "magnet_dumbbell_y"
+
+
+
+
+#-------build the random forest model using the top 4 chosen features: 
+#------"num_window"        "yaw_belt"          "magnet_dumbbell_z" "magnet_dumbbell_y"
+control2 = trainControl(method="cv", number = 5)
+rf_model = train(classe~num_window+yaw_belt+magnet_dumbbell_z+magnet_dumbbell_y, data=training_2_reduce_train, method="rf", 
+                 trControl=control2, prox=TRUE)
+print(rf_model$finalModel)
+pred_rf = predict(rf_model, newdata = training_2_reduce_test)
+confusionMatrix(pred_rf, training_2_reduce_test$classe)   # model accurary=0.9986
+
+# predict the 20 test cases
+prediction_sample = predict(rf_model, testing)
+
+```
+
+Outputs and plots:
+
+```{r, echo=FALSE}
+print(correlationMatrix)
+plot(fit.rf, type=c("g", "o"))
+prediction_sample
+```
+
